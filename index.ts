@@ -656,6 +656,42 @@ end tell`;
                 };
               }
 
+              case "createMailbox": {
+                if (!args.mailboxName) {
+                  throw new Error("Mailbox name is required for createMailbox operation");
+                }
+                const result = await mailModule.createMailbox(
+                  args.mailboxName, 
+                  args.accountName, 
+                  args.parentMailboxName
+                );
+                return {
+                  content: [{
+                    type: "text",
+                    text: result
+                  }],
+                  isError: false
+                };
+              }
+
+              case "moveEmails": {
+                if (!args.targetMailboxName || !args.emailIdentifiers || !Array.isArray(args.emailIdentifiers) || args.emailIdentifiers.length === 0) {
+                  throw new Error("Target mailbox name and email identifiers are required for moveEmails operation");
+                }
+                const result = await mailModule.moveEmailsToMailbox(
+                  args.emailIdentifiers,
+                  args.targetMailboxName,
+                  args.sourceMailboxName
+                );
+                return {
+                  content: [{
+                    type: "text",
+                    text: result
+                  }],
+                  isError: false
+                };
+              }
+
               default:
                 throw new Error(`Unknown operation: ${args.operation}`);
             }
@@ -1176,7 +1212,7 @@ function isMessagesArgs(args: unknown): args is {
 }
 
 function isMailArgs(args: unknown): args is {
-  operation: "unread" | "search" | "send" | "mailboxes" | "accounts";
+  operation: "unread" | "search" | "send" | "mailboxes" | "accounts" | "createMailbox" | "moveEmails";
   account?: string;
   mailbox?: string;
   limit?: number;
@@ -1186,12 +1222,25 @@ function isMailArgs(args: unknown): args is {
   body?: string;
   cc?: string;
   bcc?: string;
+  mailboxName?: string;
+  accountName?: string;
+  parentMailboxName?: string;
+  targetMailboxName?: string;
+  sourceMailboxName?: string;
+  emailIdentifiers?: Array<{
+    subject?: string;
+    sender?: string;
+    dateSent?: string;
+  }>;
 } {
   if (typeof args !== "object" || args === null) return false;
   
-  const { operation, account, mailbox, limit, searchTerm, to, subject, body, cc, bcc } = args as any;
+  const { 
+    operation, account, mailbox, limit, searchTerm, to, subject, body, cc, bcc,
+    mailboxName, accountName, parentMailboxName, targetMailboxName, sourceMailboxName, emailIdentifiers
+  } = args as any;
   
-  if (!operation || !["unread", "search", "send", "mailboxes", "accounts"].includes(operation)) {
+  if (!operation || !["unread", "search", "send", "mailboxes", "accounts", "createMailbox", "moveEmails"].includes(operation)) {
     return false;
   }
   
@@ -1204,6 +1253,18 @@ function isMailArgs(args: unknown): args is {
       if (!to || typeof to !== "string" || 
           !subject || typeof subject !== "string" || 
           !body || typeof body !== "string") return false;
+      break;
+    case "createMailbox":
+      if (!mailboxName || typeof mailboxName !== "string") return false;
+      break;
+    case "moveEmails":
+      if (!targetMailboxName || typeof targetMailboxName !== "string" ||
+          !emailIdentifiers || !Array.isArray(emailIdentifiers) || emailIdentifiers.length === 0) return false;
+      // Validate each email identifier has at least one search criteria
+      for (const id of emailIdentifiers) {
+        if (typeof id !== "object" || id === null) return false;
+        if (!id.subject && !id.sender && !id.dateSent) return false;
+      }
       break;
     case "unread":
     case "mailboxes":
@@ -1218,6 +1279,9 @@ function isMailArgs(args: unknown): args is {
   if (limit && typeof limit !== "number") return false;
   if (cc && typeof cc !== "string") return false;
   if (bcc && typeof bcc !== "string") return false;
+  if (accountName && typeof accountName !== "string") return false;
+  if (parentMailboxName && typeof parentMailboxName !== "string") return false;
+  if (sourceMailboxName && typeof sourceMailboxName !== "string") return false;
   
   return true;
 }

@@ -80,14 +80,14 @@ const CONTACTS_TOOL: Tool = {
   
   const MAIL_TOOL: Tool = {
     name: "mail",
-    description: "Interact with Apple Mail app - read unread emails, search emails, and send emails",
+    description: "Interact with Apple Mail app - read unread emails, search emails, send emails, create folders, and organize emails",
     inputSchema: {
       type: "object",
       properties: {
         operation: {
           type: "string",
-          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', or 'accounts'",
-          enum: ["unread", "search", "send", "mailboxes", "accounts"]
+          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', 'accounts', 'createMailbox', or 'moveEmails'",
+          enum: ["unread", "search", "send", "mailboxes", "accounts", "createMailbox", "moveEmails"]
         },
         account: {
           type: "string",
@@ -124,6 +124,47 @@ const CONTACTS_TOOL: Tool = {
         bcc: {
           type: "string",
           description: "BCC email address (optional for send operation)"
+        },
+        mailboxName: {
+          type: "string",
+          description: "Name of the mailbox/folder to create (required for createMailbox operation)"
+        },
+        accountName: {
+          type: "string",
+          description: "Account name to create mailbox in (optional for createMailbox operation)"
+        },
+        parentMailboxName: {
+          type: "string",
+          description: "Parent mailbox name for nested folder creation (optional for createMailbox operation)"
+        },
+        targetMailboxName: {
+          type: "string",
+          description: "Target mailbox to move emails to (required for moveEmails operation)"
+        },
+        sourceMailboxName: {
+          type: "string",
+          description: "Source mailbox to move emails from (optional for moveEmails operation)"
+        },
+        emailIdentifiers: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              subject: {
+                type: "string",
+                description: "Email subject to search for"
+              },
+              sender: {
+                type: "string",
+                description: "Email sender to search for"
+              },
+              dateSent: {
+                type: "string",
+                description: "Email date sent to search for"
+              }
+            }
+          },
+          description: "Array of email identifiers to find and move (required for moveEmails operation)"
         }
       },
       required: ["operation"]
