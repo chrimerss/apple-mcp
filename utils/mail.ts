@@ -793,12 +793,21 @@ async function moveEmailsToMailbox(
       throw new Error("Could not access Mail app");
     }
 
-    // Ensure Mail app is running
+    // Ensure Mail app is running and give it time to refresh mailboxes
     await runAppleScript(`
 if application "Mail" is not running then
     tell application "Mail" to activate
     delay 2
-end if`);
+end if
+
+-- Force refresh of mailboxes to ensure newly created ones are available
+tell application "Mail"
+    try
+        -- Trigger a mailbox refresh by getting the count
+        set mailboxCount to count of every mailbox
+        delay 1
+    end try
+end tell`);
 
     const escapedTargetMailbox = targetMailboxName.replace(/"/g, '\\"');
     const escapedSourceMailbox = sourceMailboxName ? sourceMailboxName.replace(/"/g, '\\"') : "";
@@ -833,8 +842,33 @@ end if`);
           script = `
 tell application "Mail"
     try
-        set sourceBox to first mailbox whose name is "${escapedSourceMailbox}"
-        set targetBox to first mailbox whose name is "${escapedTargetMailbox}"
+        -- Find source mailbox with better error handling
+        set sourceBox to missing value
+        set allMailboxes to every mailbox
+        repeat with mb in allMailboxes
+            if name of mb is "${escapedSourceMailbox}" then
+                set sourceBox to mb
+                exit repeat
+            end if
+        end repeat
+        
+        if sourceBox is missing value then
+            return "Error: Source mailbox '${escapedSourceMailbox}' not found"
+        end if
+        
+        -- Find target mailbox with better error handling
+        set targetBox to missing value
+        repeat with mb in allMailboxes
+            if name of mb is "${escapedTargetMailbox}" then
+                set targetBox to mb
+                exit repeat
+            end if
+        end repeat
+        
+        if targetBox is missing value then
+            return "Error: Target mailbox '${escapedTargetMailbox}' not found"
+        end if
+        
         set foundMessages to (messages of sourceBox whose ${whereClause})
         
         if (count of foundMessages) > 0 then
@@ -854,13 +888,28 @@ end tell`;
           script = `
 tell application "Mail"
     try
-        set targetBox to first mailbox whose name is "${escapedTargetMailbox}"
+        -- Get all mailboxes and find target
+        set allMailboxes to every mailbox
+        set targetBox to missing value
+        repeat with mb in allMailboxes
+            if name of mb is "${escapedTargetMailbox}" then
+                set targetBox to mb
+                exit repeat
+            end if
+        end repeat
+        
+        if targetBox is missing value then
+            return "Error: Target mailbox '${escapedTargetMailbox}' not found. Available mailboxes: " & (name of every mailbox as string)
+        end if
+        
         set foundMessages to {}
         
-        repeat with currentBox in every mailbox
+        repeat with currentBox in allMailboxes
             try
                 set boxMessages to (messages of currentBox whose ${whereClause})
                 set foundMessages to foundMessages & boxMessages
+            on error
+                -- Skip problematic mailboxes
             end try
         end repeat
         
@@ -907,6 +956,46 @@ end tell`;
   }
 }
 
+/**
+ * Helper function to move emails by search criteria (simpler interface)
+ * @param searchCriteria - Simple search criteria object
+ * @param targetMailboxName - Name of the target mailbox to move emails to
+ * @param sourceMailboxName - Optional source mailbox to search in
+ * @returns Promise that resolves to a summary of the move operation
+ */
+async function moveEmailsBySearch(
+  searchCriteria: {
+    subject?: string;
+    sender?: string;
+    keyword?: string;
+  },
+  targetMailboxName: string,
+  sourceMailboxName?: string,
+): Promise<string> {
+  // Convert simple criteria to EmailIdentifier format
+  const emailIdentifiers: EmailIdentifier[] = [];
+  
+  if (searchCriteria.keyword) {
+    // If keyword provided, search by subject containing keyword
+    emailIdentifiers.push({ subject: searchCriteria.keyword });
+  } else {
+    // Use provided subject and/or sender
+    const identifier: EmailIdentifier = {};
+    if (searchCriteria.subject) identifier.subject = searchCriteria.subject;
+    if (searchCriteria.sender) identifier.sender = searchCriteria.sender;
+    
+    if (Object.keys(identifier).length > 0) {
+      emailIdentifiers.push(identifier);
+    }
+  }
+  
+  if (emailIdentifiers.length === 0) {
+    throw new Error("No valid search criteria provided");
+  }
+  
+  return moveEmailsToMailbox(emailIdentifiers, targetMailboxName, sourceMailboxName);
+}
+
 export default {
   getUnreadMails,
   searchMails,
@@ -917,4 +1006,5 @@ export default {
   createMailbox,
   createEmailIdentifier,
   moveEmailsToMailbox,
+  moveEmailsBySearch,
 };
