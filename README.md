@@ -60,6 +60,9 @@ npx -y @smithery/cli@latest install @Dhravya/apple-mcp --client cursor
   - Schedule emails for future delivery
   - List and manage scheduled emails
   - Check unread email counts globally or per mailbox
+  - **NEW: Create mailboxes/folders** with support for nested folders and account-specific creation
+  - **NEW: Move emails to folders** with flexible search criteria (subject, sender, date)
+  - **NEW: Email organization tools** for better inbox management
 - Reminders:
   - List all reminders and reminder lists
   - Search for reminders by text
@@ -84,6 +87,25 @@ npx -y @smithery/cli@latest install @Dhravya/apple-mcp --client cursor
 - TODO: Search and open photos in Apple Photos app
 - TODO: Search and open music in Apple Music app
 
+## Email Folder Management Examples
+
+With the new email folder management features, you can now:
+
+```
+Create a new folder called "Important Projects" in my work email account
+```
+
+```
+Move all emails from John Doe about the quarterly report to the "Q4 Reports" folder
+```
+
+```
+Create a nested folder "Archive" under "Important Projects" and move old emails there
+```
+
+```
+Organize my inbox by moving all emails with "meeting" in the subject to a "Meetings" folder
+```
 
 You can also daisy-chain commands to create a workflow. Like:
 "can you please read the note about people i met in the conference, find their contacts and emails, and send them a message saying thank you for the time."
