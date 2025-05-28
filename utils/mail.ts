@@ -665,6 +665,248 @@ end tell`);
   }
 }
 
+interface EmailIdentifier {
+  subject?: string;
+  sender?: string;
+  dateSent?: string;
+  messageId?: string;
+}
+
+/**
+ * Creates a new mailbox/folder in the Mail app
+ * @param mailboxName - Name of the mailbox to create
+ * @param accountName - Optional account name to create the mailbox in
+ * @param parentMailboxName - Optional parent mailbox to create this mailbox under
+ * @returns Promise that resolves to a success message
+ */
+async function createMailbox(
+  mailboxName: string,
+  accountName?: string,
+  parentMailboxName?: string,
+): Promise<string> {
+  try {
+    if (!(await checkMailAccess())) {
+      throw new Error("Could not access Mail app");
+    }
+
+    // Ensure Mail app is running
+    await runAppleScript(`
+if application "Mail" is not running then
+    tell application "Mail" to activate
+    delay 2
+end if`);
+
+    const escapedMailboxName = mailboxName.replace(/"/g, '\\"');
+    const escapedAccountName = accountName ? accountName.replace(/"/g, '\\"') : "";
+    const escapedParentMailboxName = parentMailboxName ? parentMailboxName.replace(/"/g, '\\"') : "";
+
+    let script = '';
+
+    if (accountName) {
+      if (parentMailboxName) {
+        // Create mailbox under a parent mailbox in specific account
+        script = `
+tell application "Mail"
+    try
+        set targetAccount to first account whose name is "${escapedAccountName}"
+        set parentBox to first mailbox of targetAccount whose name is "${escapedParentMailboxName}"
+        make new mailbox with properties {name:"${escapedMailboxName}"} at parentBox
+        return "success"
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+end tell`;
+      } else {
+        // Create mailbox at root level of specific account
+        script = `
+tell application "Mail"
+    try
+        set targetAccount to first account whose name is "${escapedAccountName}"
+        make new mailbox with properties {name:"${escapedMailboxName}"} at targetAccount
+        return "success"
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+end tell`;
+      }
+    } else {
+      // Create mailbox in first available account
+      script = `
+tell application "Mail"
+    try
+        set firstAccount to first account
+        make new mailbox with properties {name:"${escapedMailboxName}"} at firstAccount
+        return "success"
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+end tell`;
+    }
+
+    const result = await runAppleScript(script);
+
+    if (result === "success") {
+      const location = accountName 
+        ? (parentMailboxName ? `${accountName}/${parentMailboxName}` : accountName)
+        : "default account";
+      return `Mailbox "${mailboxName}" created successfully in ${location}`;
+    } else if (result.startsWith("Error:")) {
+      throw new Error(result);
+    } else {
+      throw new Error(`Unexpected result: ${result}`);
+    }
+  } catch (error) {
+    console.error("Error in createMailbox:", error);
+    throw new Error(
+      `Error creating mailbox: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * Helper function to create EmailIdentifier from EmailMessage
+ * @param email - EmailMessage object to convert
+ * @returns EmailIdentifier object
+ */
+function createEmailIdentifier(email: EmailMessage): EmailIdentifier {
+  return {
+    subject: email.subject,
+    sender: email.sender,
+    dateSent: email.dateSent,
+  };
+}
+
+/**
+ * Moves emails to a specific mailbox/folder
+ * @param emailIdentifiers - Array of email identifiers to find and move
+ * @param targetMailboxName - Name of the target mailbox to move emails to
+ * @param sourceMailboxName - Optional source mailbox to search in (if not provided, searches all mailboxes)
+ * @returns Promise that resolves to a summary of the move operation
+ */
+async function moveEmailsToMailbox(
+  emailIdentifiers: EmailIdentifier[],
+  targetMailboxName: string,
+  sourceMailboxName?: string,
+): Promise<string> {
+  try {
+    if (!(await checkMailAccess())) {
+      throw new Error("Could not access Mail app");
+    }
+
+    // Ensure Mail app is running
+    await runAppleScript(`
+if application "Mail" is not running then
+    tell application "Mail" to activate
+    delay 2
+end if`);
+
+    const escapedTargetMailbox = targetMailboxName.replace(/"/g, '\\"');
+    const escapedSourceMailbox = sourceMailboxName ? sourceMailboxName.replace(/"/g, '\\"') : "";
+
+    let movedCount = 0;
+    const errors: string[] = [];
+
+    for (const identifier of emailIdentifiers) {
+      try {
+        let searchConditions: string[] = [];
+
+        if (identifier.subject) {
+          searchConditions.push(`subject contains "${identifier.subject.replace(/"/g, '\\"')}"`);
+        }
+        if (identifier.sender) {
+          searchConditions.push(`sender contains "${identifier.sender.replace(/"/g, '\\"')}"`);
+        }
+        if (identifier.dateSent) {
+          searchConditions.push(`date sent is "${identifier.dateSent.replace(/"/g, '\\"')}"`);
+        }
+
+        if (searchConditions.length === 0) {
+          errors.push("No valid identifier provided for one email");
+          continue;
+        }
+
+        const whereClause = searchConditions.join(" and ");
+
+        let script = '';
+        if (sourceMailboxName) {
+          // Search within specific mailbox
+          script = `
+tell application "Mail"
+    try
+        set sourceBox to first mailbox whose name is "${escapedSourceMailbox}"
+        set targetBox to first mailbox whose name is "${escapedTargetMailbox}"
+        set foundMessages to (messages of sourceBox whose ${whereClause})
+        
+        if (count of foundMessages) > 0 then
+            repeat with msg in foundMessages
+                move msg to targetBox
+            end repeat
+            return "moved:" & (count of foundMessages)
+        else
+            return "notfound"
+        end if
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+end tell`;
+        } else {
+          // Search across all mailboxes
+          script = `
+tell application "Mail"
+    try
+        set targetBox to first mailbox whose name is "${escapedTargetMailbox}"
+        set foundMessages to {}
+        
+        repeat with currentBox in every mailbox
+            try
+                set boxMessages to (messages of currentBox whose ${whereClause})
+                set foundMessages to foundMessages & boxMessages
+            end try
+        end repeat
+        
+        if (count of foundMessages) > 0 then
+            repeat with msg in foundMessages
+                move msg to targetBox
+            end repeat
+            return "moved:" & (count of foundMessages)
+        else
+            return "notfound"
+        end if
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+end tell`;
+        }
+
+        const result = await runAppleScript(script);
+
+        if (result.startsWith("moved:")) {
+          const count = parseInt(result.split(":")[1]);
+          movedCount += count;
+        } else if (result === "notfound") {
+          errors.push(`Email not found with criteria: ${JSON.stringify(identifier)}`);
+        } else if (result.startsWith("Error:")) {
+          errors.push(`Error moving email: ${result}`);
+        }
+      } catch (emailError) {
+        errors.push(`Error processing email ${JSON.stringify(identifier)}: ${emailError}`);
+      }
+    }
+
+    let resultMessage = `Moved ${movedCount} email(s) to "${targetMailboxName}"`;
+    if (errors.length > 0) {
+      resultMessage += `\nErrors encountered: ${errors.join("; ")}`;
+    }
+
+    return resultMessage;
+  } catch (error) {
+    console.error("Error in moveEmailsToMailbox:", error);
+    throw new Error(
+      `Error moving emails: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 export default {
   getUnreadMails,
   searchMails,
@@ -672,4 +914,7 @@ export default {
   getMailboxes,
   getAccounts,
   getMailboxesForAccount,
+  createMailbox,
+  createEmailIdentifier,
+  moveEmailsToMailbox,
 };
