@@ -1,14 +1,14 @@
 {
-  "name": "apple-mcp",
-  "version": "0.2.7",
+  "name": "@chrimerss/apple-mcp-enhanced",
+  "version": "1.0.0",
   "module": "index.ts",
   "type": "module",
-  "description": "Apple MCP tools for contacts, notes, messages, and mail integration",
-  "author": "Dhravya Shah",
+  "description": "Enhanced Apple MCP tools with email folder management, contacts, notes, messages, and mail integration",
+  "author": "chrimerss",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dhravya/apple-mcp.git"
+    "url": "git+https://github.com/chrimerss/apple-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -17,10 +17,12 @@
     "notes",
     "messages",
     "mail",
-    "claude"
+    "claude",
+    "email-management",
+    "folder-organization"
   ],
   "bin": {
-    "apple-mcp": "./index.ts"
+    "apple-mcp-enhanced": "./index.ts"
   },
   "scripts": {
     "dev": "bun run index.ts"
