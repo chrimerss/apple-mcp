@@ -1,6 +1,6 @@
 {
   "name": "@chrimerss/apple-mcp-enhanced",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "module": "index.ts",
   "type": "module",
   "description": "Enhanced Apple MCP tools with email folder management, contacts, notes, messages, and mail integration",
